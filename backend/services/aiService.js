@@ -20,7 +20,11 @@ class AIService {
       }
 
       const context = this.buildLeadContext(lead);
-      const prompt = this.buildResponsePrompt(message, intent, context);
+      
+      // Build conversation history for better context
+      const conversationHistory = this.buildConversationHistory(lead);
+      
+      const prompt = this.buildResponsePrompt(message, intent, context, conversationHistory);
 
       const response = await axios.post(
         `${this.baseURL}/chat/completions`,
@@ -37,7 +41,7 @@ class AIService {
             }
           ],
           max_tokens: 300,
-          temperature: 0.7
+          temperature: 0.8  // Slightly higher temperature for more variety
         },
         {
           headers: {
@@ -248,20 +252,38 @@ class AIService {
     `;
   }
 
-  buildResponsePrompt(message, intent, context) {
+  buildConversationHistory(lead) {
+    if (!lead || !lead.chatbotInteractions || lead.chatbotInteractions.length === 0) {
+      return 'No previous conversation history.';
+    }
+    
+    // Get last 5 interactions to avoid token limit
+    const recentInteractions = lead.chatbotInteractions.slice(-5);
+    
+    return recentInteractions.map(interaction => 
+      `User: ${interaction.message}\nBot: ${interaction.response}`
+    ).join('\n\n');
+  }
+
+  buildResponsePrompt(message, intent, context, conversationHistory = '') {
     return `
       User message: "${message}"
       Detected intent: ${intent}
       Lead context: ${context}
       
+      Previous conversation:
+      ${conversationHistory}
+      
       Generate a helpful, personalized response that:
       1. Addresses their specific message
-      2. Shows understanding of their career goals
-      3. Provides value (insights, resources, next steps)
-      4. Naturally guides them toward booking a consultation
-      5. Maintains a friendly, professional tone
+      2. Considers the conversation history to avoid repetition
+      3. Shows understanding of their career goals
+      4. Provides value (insights, resources, next steps)
+      5. Naturally guides them toward booking a consultation
+      6. Maintains a friendly, professional tone
+      7. Varies the language and approach from previous responses
       
-      Keep response under 150 words.
+      Keep response under 150 words and make it conversational.
     `;
   }
 
@@ -339,36 +361,113 @@ class AIService {
   }
 
   getFallbackResponse(intent, lead) {
+    // Check conversation history to avoid recent responses
+    const recentResponses = lead?.chatbotInteractions?.slice(-3).map(i => i.response) || [];
+    
+    // Create multiple response variations to avoid repetition
     const responses = {
-      'data_engineering_interest': {
-        text: `That's awesome! Data Engineering is one of the fastest-growing fields in tech. ${lead?.firstName ? lead.firstName + ', ' : ''}I'd love to share our complete Data Engineering roadmap with you. Would you like me to send it to your email?`,
-        actions: [
-          { type: 'offer_resource', data: { resourceType: 'data_engineering_roadmap' } },
-          { type: 'collect_email', data: {} }
-        ]
-      },
-      'software_engineering_interest': {
-        text: `Excellent choice! Software Engineering offers incredible opportunities. ${lead?.firstName ? lead.firstName + ', ' : ''}let me share some resources that can help you get started. What's your current experience level?`,
-        actions: [
-          { type: 'collect_info', data: { fields: ['experienceLevel'] } },
-          { type: 'offer_resource', data: { resourceType: 'swe_guide' } }
-        ]
-      },
-      'booking_intent': {
-        text: `I'd be happy to connect you with one of our career experts! ${lead?.firstName ? lead.firstName + ', ' : ''}they've helped thousands of professionals land their dream tech jobs. Let me show you available time slots.`,
-        actions: [
-          { type: 'show_calendar', data: { direct: true } }
-        ]
-      },
-      'general_inquiry': {
-        text: `Thanks for reaching out! I'm here to help you accelerate your tech career. ${lead?.firstName ? lead.firstName + ', ' : ''}what specific area are you most interested in learning about?`,
-        actions: [
-          { type: 'show_options', data: { options: ['Data Engineering', 'Software Engineering', 'AI/ML', 'Career Consultation'] } }
-        ]
-      }
+      'data_engineering_interest': [
+        {
+          text: `That's awesome! Data Engineering is one of the fastest-growing fields in tech. ${lead?.firstName ? lead.firstName + ', ' : ''}I'd love to share our complete Data Engineering roadmap with you. Would you like me to send it to your email?`,
+          actions: [
+            { type: 'offer_resource', data: { resourceType: 'data_engineering_roadmap' } },
+            { type: 'collect_email', data: {} }
+          ]
+        },
+        {
+          text: `Great choice! ${lead?.firstName ? lead.firstName + ', ' : ''}Data Engineering is where the real magic happens in tech companies. I have some exclusive resources that could jumpstart your journey. Can I share them with you?`,
+          actions: [
+            { type: 'offer_resource', data: { resourceType: 'data_engineering_roadmap' } },
+            { type: 'collect_email', data: {} }
+          ]
+        },
+        {
+          text: `Fantastic! ${lead?.firstName ? lead.firstName + ', ' : ''}Data Engineers are in huge demand right now. I'd love to show you exactly how to break into this field. Shall I send you our step-by-step guide?`,
+          actions: [
+            { type: 'offer_resource', data: { resourceType: 'data_engineering_roadmap' } },
+            { type: 'collect_email', data: {} }
+          ]
+        }
+      ],
+      'software_engineering_interest': [
+        {
+          text: `Excellent choice! Software Engineering offers incredible opportunities. ${lead?.firstName ? lead.firstName + ', ' : ''}let me share some resources that can help you get started. What's your current experience level?`,
+          actions: [
+            { type: 'collect_info', data: { fields: ['experienceLevel'] } },
+            { type: 'offer_resource', data: { resourceType: 'swe_guide' } }
+          ]
+        },
+        {
+          text: `Perfect! ${lead?.firstName ? lead.firstName + ', ' : ''}Software Engineering is such a rewarding career path. I have some insider tips on how to land your first role. What's your background like?`,
+          actions: [
+            { type: 'collect_info', data: { fields: ['experienceLevel'] } },
+            { type: 'offer_resource', data: { resourceType: 'swe_guide' } }
+          ]
+        },
+        {
+          text: `Smart move! ${lead?.firstName ? lead.firstName + ', ' : ''}The software engineering market is booming. I can help you navigate this journey. Are you just starting out or do you have some experience?`,
+          actions: [
+            { type: 'collect_info', data: { fields: ['experienceLevel'] } },
+            { type: 'offer_resource', data: { resourceType: 'swe_guide' } }
+          ]
+        }
+      ],
+      'booking_intent': [
+        {
+          text: `I'd be happy to connect you with one of our career experts! ${lead?.firstName ? lead.firstName + ', ' : ''}they've helped thousands of professionals land their dream tech jobs. Let me show you available time slots.`,
+          actions: [
+            { type: 'show_calendar', data: { direct: true } }
+          ]
+        },
+        {
+          text: `Great idea! ${lead?.firstName ? lead.firstName + ', ' : ''}Our career consultants are amazing - they know exactly what it takes to break into tech. Ready to book your free session?`,
+          actions: [
+            { type: 'show_calendar', data: { direct: true } }
+          ]
+        },
+        {
+          text: `Perfect! ${lead?.firstName ? lead.firstName + ', ' : ''}A one-on-one session with our experts can really accelerate your journey. Let's get you scheduled!`,
+          actions: [
+            { type: 'show_calendar', data: { direct: true } }
+          ]
+        }
+      ],
+      'general_inquiry': [
+        {
+          text: `Thanks for reaching out! I'm here to help you accelerate your tech career. ${lead?.firstName ? lead.firstName + ', ' : ''}what specific area are you most interested in learning about?`,
+          actions: [
+            { type: 'show_options', data: { options: ['Data Engineering', 'Software Engineering', 'AI/ML', 'Career Consultation'] } }
+          ]
+        },
+        {
+          text: `Hello! ${lead?.firstName ? lead.firstName + ', ' : ''}I'm excited to help you navigate your tech career journey. What brings you here today?`,
+          actions: [
+            { type: 'show_options', data: { options: ['Data Engineering', 'Software Engineering', 'AI/ML', 'Career Consultation'] } }
+          ]
+        },
+        {
+          text: `Hi there! ${lead?.firstName ? lead.firstName + ', ' : ''}I'm here to help you unlock amazing opportunities in tech. What area interests you most?`,
+          actions: [
+            { type: 'show_options', data: { options: ['Data Engineering', 'Software Engineering', 'AI/ML', 'Career Consultation'] } }
+          ]
+        }
+      ]
     };
 
-    return responses[intent] || responses['general_inquiry'];
+    // Get variations for the intent, fallback to general_inquiry if not found
+    const intentResponses = responses[intent] || responses['general_inquiry'];
+    
+    // Filter out responses that were used recently
+    const availableResponses = intentResponses.filter(response => 
+      !recentResponses.some(recent => recent.includes(response.text.substring(0, 30)))
+    );
+    
+    // If all responses were used recently, use all variations
+    const finalResponses = availableResponses.length > 0 ? availableResponses : intentResponses;
+    
+    // Select a random response from the available variations
+    const randomIndex = Math.floor(Math.random() * finalResponses.length);
+    return finalResponses[randomIndex];
   }
 
   getDefaultPersonality() {

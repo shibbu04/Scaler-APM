@@ -347,7 +347,24 @@ class LeadFunnelApp {
         }
 
         const response = await fetch(url, options);
-        return await response.json();
+        
+        // Check if response is ok
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Check if response has content
+        if (response.status === 204 || response.headers.get('content-length') === '0') {
+            return { success: true };
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return await response.json();
+        } else {
+            // Return success for non-JSON responses
+            return { success: true, text: await response.text() };
+        }
     }
 
     trackEvent(eventName, properties = {}) {
