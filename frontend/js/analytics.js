@@ -1,6 +1,12 @@
 // Analytics and tracking functionality
 class AnalyticsTracker {
     constructor() {
+        // Use global CONFIG if available, otherwise fallback
+        this.apiBaseUrl = window.CONFIG?.API_BASE_URL || (
+            window.location.hostname === 'localhost' 
+                ? 'http://localhost:3000/api'
+                : 'https://scaler-apm.onrender.com/api'
+        );
         this.sessionId = this.generateSessionId();
         this.userId = this.getUserId();
         this.events = [];
@@ -312,7 +318,7 @@ class AnalyticsTracker {
 
     async sendToServer() {
         try {
-            await fetch('/api/analytics/events', {
+            await fetch(`${this.apiBaseUrl}/analytics/events`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

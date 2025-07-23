@@ -407,10 +407,24 @@ module.exports = {
   
   generatePersonalizedEmail: (template, lead) => 
     aiService.generatePersonalizedEmail(template, lead),
+}
+
+// Create and export instance
+const aiService = new AIService();
+
+module.exports = {
+  generatePersonalizedResponse: (message, intent, lead) => 
+    aiService.generatePersonalizedResponse(message, intent, lead),
+  
+  generatePersonalizedEmail: (template, lead) => 
+    aiService.generatePersonalizedEmail(template, lead),
   
   analyzeLeadPersonality: (interactions) => 
     aiService.analyzeLeadPersonality(interactions),
   
   generateFollowUpSuggestions: (lead) => 
-    aiService.generateFollowUpSuggestions(lead)
+    aiService.generateFollowUpSuggestions(lead),
+
+  // Export the instance for direct access if needed
+  aiService
 };

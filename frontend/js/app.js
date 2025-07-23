@@ -1,7 +1,12 @@
 // Main application JavaScript
 class LeadFunnelApp {
     constructor() {
-        this.apiBaseUrl = window.location.origin + '/api';
+        // Use global CONFIG if available, otherwise fallback
+        this.apiBaseUrl = window.CONFIG?.API_BASE_URL || (
+            window.location.hostname === 'localhost' 
+                ? 'http://localhost:3000/api'
+                : 'https://scaler-apm.onrender.com/api'
+        );
         this.leadData = {};
         this.sessionId = this.generateSessionId();
         

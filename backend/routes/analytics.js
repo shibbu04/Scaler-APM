@@ -2,6 +2,56 @@ const express = require('express');
 const router = express.Router();
 const Lead = require('../models/Lead');
 
+// POST /api/analytics/events - Track frontend events
+router.post('/events', async (req, res) => {
+  try {
+    const { events } = req.body;
+    
+    if (!events || !Array.isArray(events)) {
+      return res.status(400).json({ error: 'Events array is required' });
+    }
+
+    // Process each event
+    for (const event of events) {
+      const { type, data, sessionId, userId, timestamp } = event;
+      
+      // If there's a lead associated, update their analytics
+      if (userId || data?.email) {
+        const lead = await Lead.findOne({ 
+          $or: [
+            { _id: userId },
+            { email: data?.email }
+          ]
+        });
+        
+        if (lead) {
+          // Add to lead's interaction history
+          lead.interactions = lead.interactions || [];
+          lead.interactions.push({
+            type: 'web_event',
+            details: `${type}: ${JSON.stringify(data)}`,
+            timestamp: new Date(timestamp || Date.now())
+          });
+          
+          // Update last interaction
+          lead.lastInteraction = new Date();
+          
+          await lead.save();
+        }
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Tracked ${events.length} events successfully` 
+    });
+
+  } catch (error) {
+    console.error('Events tracking error:', error);
+    res.status(500).json({ error: 'Failed to track events' });
+  }
+});
+
 // GET /api/analytics/dashboard - Get main dashboard metrics
 router.get('/dashboard', async (req, res) => {
   try {
