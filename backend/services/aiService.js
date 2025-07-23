@@ -4,10 +4,21 @@ class AIService {
   constructor() {
     this.openaiApiKey = process.env.OPENAI_API_KEY;
     this.baseURL = 'https://api.openai.com/v1';
+    
+    // Validate API key
+    if (!this.openaiApiKey) {
+      console.warn('⚠️ OpenAI API key not found. AI features will use fallback responses.');
+    }
   }
 
   async generatePersonalizedResponse(message, intent, lead) {
     try {
+      // Check if API key is available
+      if (!this.openaiApiKey) {
+        console.log('Using fallback response due to missing OpenAI API key');
+        return this.getFallbackResponse(intent, lead);
+      }
+
       const context = this.buildLeadContext(lead);
       const prompt = this.buildResponsePrompt(message, intent, context);
 
@@ -398,33 +409,22 @@ class AIService {
   }
 }
 
-// Export functions for use in routes
-const aiService = new AIService();
-
-module.exports = {
-  generatePersonalizedResponse: (message, intent, lead) => 
-    aiService.generatePersonalizedResponse(message, intent, lead),
-  
-  generatePersonalizedEmail: (template, lead) => 
-    aiService.generatePersonalizedEmail(template, lead),
-}
-
 // Create and export instance
-const aiService = new AIService();
+const aiServiceInstance = new AIService();
 
 module.exports = {
   generatePersonalizedResponse: (message, intent, lead) => 
-    aiService.generatePersonalizedResponse(message, intent, lead),
+    aiServiceInstance.generatePersonalizedResponse(message, intent, lead),
   
   generatePersonalizedEmail: (template, lead) => 
-    aiService.generatePersonalizedEmail(template, lead),
+    aiServiceInstance.generatePersonalizedEmail(template, lead),
   
   analyzeLeadPersonality: (interactions) => 
-    aiService.analyzeLeadPersonality(interactions),
+    aiServiceInstance.analyzeLeadPersonality(interactions),
   
   generateFollowUpSuggestions: (lead) => 
-    aiService.generateFollowUpSuggestions(lead),
+    aiServiceInstance.generateFollowUpSuggestions(lead),
 
   // Export the instance for direct access if needed
-  aiService
+  aiService: aiServiceInstance
 };

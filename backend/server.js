@@ -7,6 +7,11 @@ const mongoose = require('mongoose');
 const path = require('path');
 require('dotenv').config();
 
+console.log('🚀 Starting server...');
+console.log('📊 Environment:', process.env.NODE_ENV);
+console.log('🔑 OpenAI API Key:', process.env.OPENAI_API_KEY ? 'Loaded ✅' : 'Missing ❌');
+console.log('📧 Mailchimp API Key:', process.env.MAILCHIMP_API_KEY ? 'Loaded ✅' : 'Missing ❌');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
