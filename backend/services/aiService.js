@@ -5,6 +5,11 @@ class AIService {
     this.openaiApiKey = process.env.OPENAI_API_KEY;
     this.baseURL = 'https://api.openai.com/v1';
     
+    // Simple in-memory cache to reduce API calls
+    this.responseCache = new Map();
+    this.cacheMaxSize = 100;
+    this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
+    
     // Validate API key
     if (!this.openaiApiKey) {
       console.warn('⚠️ OpenAI API key not found. AI features will use fallback responses.');
@@ -13,6 +18,20 @@ class AIService {
 
   async generatePersonalizedResponse(message, intent, lead) {
     try {
+      // Create cache key based on message and intent
+      const cacheKey = `${intent}_${message.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      
+      // Check cache first (only for non-personalized responses)
+      if (!lead?.firstName && this.responseCache.has(cacheKey)) {
+        const cached = this.responseCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < this.cacheTimeout) {
+          console.log('Using cached response');
+          return cached.response;
+        } else {
+          this.responseCache.delete(cacheKey);
+        }
+      }
+
       // Check if API key is available
       if (!this.openaiApiKey) {
         console.log('Using fallback response due to missing OpenAI API key');
@@ -26,42 +45,86 @@ class AIService {
       
       const prompt = this.buildResponsePrompt(message, intent, context, conversationHistory);
 
-      const response = await axios.post(
-        `${this.baseURL}/chat/completions`,
-        {
-          model: 'gpt-3.5-turbo',
-          messages: [
+      // Add retry logic for rate limiting
+      const maxRetries = 2;
+      let lastError;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await axios.post(
+            `${this.baseURL}/chat/completions`,
             {
-              role: 'system',
-              content: this.getSystemPrompt()
+              model: 'gpt-3.5-turbo',
+              messages: [
+                {
+                  role: 'system',
+                  content: this.getSystemPrompt()
+                },
+                {
+                  role: 'user', 
+                  content: prompt
+                }
+              ],
+              max_tokens: 250,  // Reduced to save tokens
+              temperature: 0.8
             },
             {
-              role: 'user', 
-              content: prompt
+              headers: {
+                'Authorization': `Bearer ${this.openaiApiKey}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000  // 10 second timeout
             }
-          ],
-          max_tokens: 300,
-          temperature: 0.8  // Slightly higher temperature for more variety
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.openaiApiKey}`,
-            'Content-Type': 'application/json'
+          );
+
+          const aiResponse = response.data.choices[0].message.content;
+          
+          // Determine actions based on intent
+          const actions = this.determineActions(intent, lead);
+
+          const result = {
+            text: aiResponse,
+            actions,
+            intent,
+            confidence: 0.85,
+            source: 'openai'
+          };
+
+          // Cache non-personalized responses
+          if (!lead?.firstName && this.responseCache.size < this.cacheMaxSize) {
+            this.responseCache.set(cacheKey, {
+              response: result,
+              timestamp: Date.now()
+            });
           }
+
+          return result;
+
+        } catch (retryError) {
+          lastError = retryError;
+          
+          // If it's a rate limit error, wait before retrying
+          if (retryError.response?.status === 429 && attempt < maxRetries) {
+            const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
+            console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          
+          // For other errors or final attempt, break and use fallback
+          break;
         }
-      );
+      }
 
-      const aiResponse = response.data.choices[0].message.content;
+      // Log the specific error for monitoring
+      if (lastError?.response?.status === 429) {
+        console.log('AI service rate limited, using fallback response');
+      } else {
+        console.error('AI response generation error:', lastError?.message || lastError);
+      }
       
-      // Determine actions based on intent
-      const actions = this.determineActions(intent, lead);
-
-      return {
-        text: aiResponse,
-        actions,
-        intent,
-        confidence: 0.85 // Mock confidence score
-      };
+      // Fallback to predefined responses
+      return this.getFallbackResponse(intent, lead);
 
     } catch (error) {
       console.error('AI response generation error:', error);
@@ -467,7 +530,13 @@ class AIService {
     
     // Select a random response from the available variations
     const randomIndex = Math.floor(Math.random() * finalResponses.length);
-    return finalResponses[randomIndex];
+    const selectedResponse = finalResponses[randomIndex];
+    
+    return {
+      ...selectedResponse,
+      source: 'fallback',
+      confidence: 0.75
+    };
   }
 
   getDefaultPersonality() {
